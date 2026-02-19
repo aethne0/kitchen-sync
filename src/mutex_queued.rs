@@ -15,7 +15,6 @@ pub struct MutexFair<T: ?Sized> {
     inner: UnsafeCell<T>,
 }
 
-// TODO: think more about why (if) this is correct
 unsafe impl<T: ?Sized + Send> Send for MutexFair<T> where T: Send {}
 unsafe impl<T: ?Sized + Send> Sync for MutexFair<T> where T: Send {}
 

@@ -15,8 +15,9 @@ else
 endif
 badd +8 src/mutex.rs
 badd +16 src/lib.rs
-badd +10 src/mutex_queued.rs
-badd +8 README.md
+badd +20 src/mutex_queued.rs
+badd +2 README.md
+badd +2 .gitignore
 argglobal
 %argdel
 set stal=2
@@ -43,6 +44,25 @@ normal! zt
 keepjumps 16
 normal! 020|
 tabnext
+edit README.md
+argglobal
+setlocal foldmethod=manual
+setlocal foldexpr=0
+setlocal foldmarker={{{,}}}
+setlocal foldignore=#
+setlocal foldlevel=0
+setlocal foldminlines=1
+setlocal foldnestmax=20
+setlocal foldenable
+silent! normal! zE
+let &fdl = &fdl
+let s:l = 3 - ((2 * winheight(0) + 27) / 54)
+if s:l < 1 | let s:l = 1 | endif
+keepjumps exe s:l
+normal! zt
+keepjumps 3
+normal! 0
+tabnext
 edit src/mutex_queued.rs
 tcd ~/prg/kitchen-sync
 argglobal
@@ -56,31 +76,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 10 - ((9 * winheight(0) + 27) / 54)
+let s:l = 20 - ((19 * winheight(0) + 27) / 54)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 10
-normal! 014|
-tabnext
-edit ~/prg/kitchen-sync/README.md
-argglobal
-setlocal foldmethod=manual
-setlocal foldexpr=0
-setlocal foldmarker={{{,}}}
-setlocal foldignore=#
-setlocal foldlevel=0
-setlocal foldminlines=1
-setlocal foldnestmax=20
-setlocal foldenable
-silent! normal! zE
-let &fdl = &fdl
-let s:l = 18 - ((17 * winheight(0) + 27) / 54)
-if s:l < 1 | let s:l = 1 | endif
-keepjumps exe s:l
-normal! zt
-keepjumps 18
-normal! 013|
+keepjumps 20
+normal! 0
 tabnext 3
 set stal=1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
