@@ -5,28 +5,32 @@ use std::{
     thread,
 };
 
-/// RAII spinlock.
-/// I managed to implement this without referring to anything, which was
-/// surprising as I've never used `UnsafeCell` before. Divine intervention?
-pub struct Mutex<T: ?Sized> {
+
+/// Fair RAII spinlock with a lock-free wait queue.
+/// This uses 
+pub struct MutexFair<T: ?Sized> {
     pin: AtomicBool,
+    /// Recap: `UnsafeCell` is used for interior mutability, which more or
+    /// less translates to "turning `&` into `&mut`". banslates
     inner: UnsafeCell<T>,
 }
 
-unsafe impl<T: ?Sized + Send> Send for Mutex<T> where T: Send {}
-unsafe impl<T: ?Sized + Send> Sync for Mutex<T> where T: Send {}
+// TODO: think more about why (if) this is correct
+unsafe impl<T: ?Sized + Send> Send for MutexFair<T> where T: Send {}
+unsafe impl<T: ?Sized + Send> Sync for MutexFair<T> where T: Send {}
 
-impl<T> Mutex<T> {
+impl<T> MutexFair<T> {
     #[must_use]
     pub fn new(inner: T) -> Self {
         Self {
             inner: UnsafeCell::new(inner),
+            head: Atomic
             pin: AtomicBool::new(false),
         }
     }
 
     /// Just give her the old CMPXCHG
-    pub fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
+    pub fn lock<'a>(&'a self) -> MutexFairGuard<'a, T> {
         // obviously this sucks
         while self
             .pin
@@ -36,7 +40,7 @@ impl<T> Mutex<T> {
             thread::yield_now();
         }
 
-        MutexGuard {
+        MutexFairGuard {
             mutex: &self,
             inner: unsafe { self.inner.get().as_mut().unwrap() },
         }
@@ -44,13 +48,13 @@ impl<T> Mutex<T> {
 
     /// The `std` version returns a `Result` because it needs to return LockPoisoned.
     /// We can just use an `Option` because it either is held or free.
-    pub fn try_lock<'a>(&'a self) -> Option<MutexGuard<'a, T>> {
+    pub fn try_lock<'a>(&'a self) -> Option<MutexFairGuard<'a, T>> {
         if self
             .pin
             .compare_exchange_weak(false, true, Ordering::Relaxed, Ordering::Relaxed)
             .is_ok()
         {
-            Some(MutexGuard {
+            Some(MutexFairGuard {
                 mutex: &self,
                 inner: unsafe { self.inner.get().as_mut().unwrap() },
             })
@@ -59,71 +63,44 @@ impl<T> Mutex<T> {
         }
     }
 
-    pub fn lock_spin<'a>(&'a self) -> MutexGuard<'a, T> {
+    pub fn lock_spin<'a>(&'a self) -> MutexFairGuard<'a, T> {
         while self
             .pin
             .compare_exchange_weak(false, true, Ordering::Relaxed, Ordering::Relaxed)
             .is_err()
         {}
 
-        MutexGuard {
+        MutexFairGuard {
             mutex: &self,
             inner: unsafe { self.inner.get().as_mut().unwrap() },
         }
     }
 }
 
-#[must_use = "MutexGuard is RAII based, it will release lock immediately if dropped"]
-pub struct MutexGuard<'a, T> {
-    mutex: &'a Mutex<T>,
+#[must_use = "MutexFairGuard is RAII based, it will release lock immediately if dropped"]
+pub struct MutexFairGuard<'a, T> {
+    mutex: &'a MutexFair<T>,
     inner: &'a mut T,
 }
 
-// impl<'a, T> MutexGuard<'a, T> {}
+// impl<'a, T> MutexFairGuard<'a, T> {}
 
-impl<'a, T> Deref for MutexGuard<'a, T> {
+impl<'a, T> Deref for MutexFairGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.inner
     }
 }
 
-impl<'a, T> DerefMut for MutexGuard<'a, T> {
+impl<'a, T> DerefMut for MutexFairGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner
     }
 }
 
-impl<'a, T> Drop for MutexGuard<'a, T> {
+impl<'a, T> Drop for MutexFairGuard<'a, T> {
     fn drop(&mut self) {
         self.mutex.pin.store(false, Ordering::Relaxed);
     }
 }
 
-#[cfg(test)]
-mod test {
-    use std::{sync::Arc, thread, time::Duration};
-
-    use crate::Mutex;
-
-    // ya idk it seems to work boss
-    #[test]
-    fn test_mutex() {
-        let m = Arc::new(Mutex::new(50));
-
-        for _ in 0..4 {
-            let m = m.clone();
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(50));
-                let mut val = m.lock();
-                println!("{}", *val);
-                *val *= 2;
-            });
-        }
-
-        let g = m.lock();
-        thread::sleep(Duration::from_millis(500));
-        drop(g);
-        thread::sleep(Duration::from_millis(100));
-    }
-}

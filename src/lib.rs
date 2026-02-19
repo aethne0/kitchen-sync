@@ -12,5 +12,8 @@
 mod mutex;
 pub use mutex::Mutex;
 
+mod mutex_queued;
+pub use mutex_queued::MutexFair;
+
 mod rwlock;
 pub use rwlock::RwLock;

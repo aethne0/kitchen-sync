@@ -1,7 +1,7 @@
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicU64, Ordering}, 
+    sync::atomic::{AtomicU64, Ordering},
     thread,
 };
 
@@ -74,7 +74,7 @@ impl<'a, T> DerefMut for RwLockReadGuard<'a, T> {
 
 impl<'a, T> Drop for RwLockReadGuard<'a, T> {
     fn drop(&mut self) {
-        self.mutex.latch.store(false, Ordering::Relaxed);
+        self.mutex.latch.store(todo!(), Ordering::Relaxed);
     }
 }
 
@@ -101,7 +101,7 @@ impl<'a, T> DerefMut for RwLockWriteGuard<'a, T> {
 
 impl<'a, T> Drop for RwLockWriteGuard<'a, T> {
     fn drop(&mut self) {
-        self.mutex.latch.store(false, Ordering::Relaxed);
+        self.mutex.latch.store(todo!(), Ordering::Relaxed);
     }
 }
 
