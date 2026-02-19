@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-/// RAII spinlock.
+/// Test-and-set spinlock
 /// I managed to implement this without referring to anything, which was
 /// surprising as I've never used `UnsafeCell` before. Divine intervention?
 pub struct Mutex<T: ?Sized> {
@@ -102,9 +102,8 @@ impl<'a, T> Drop for MutexGuard<'a, T> {
 
 #[cfg(test)]
 mod test {
+    use crate::test_and_set::Mutex;
     use std::{sync::Arc, thread, time::Duration};
-
-    use crate::Mutex;
 
     // ya idk it seems to work boss
     #[test]

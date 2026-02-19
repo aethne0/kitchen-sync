@@ -9,6 +9,5 @@
 //! (futex or at least sleeping/waking threads)
 //! But I want to keep these purely userspace, so just using atomics
 //! and language features and such.
-
-mod mutex_queued;
-pub use mutex_queued::Mutex;
+mod test_and_set;
+mod mcs_lock;

@@ -33,7 +33,7 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
-        self.tail.
+        self.tail
 
 
         MutexGuard {
@@ -69,4 +69,5 @@ impl<'a, T> Drop for MutexGuard<'a, T> {
         self.mutex.pin.store(false, Ordering::Relaxed);
     }
 }
+
 
