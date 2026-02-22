@@ -1,4 +1,5 @@
 # kitchen-sync
+[![Rust](https://github.com/aethne0/kitchen-sync/actions/workflows/rust.yml/badge.svg)](https://github.com/aethne0/kitchen-sync/actions/workflows/rust.yml)
 
 [Implementing](https://github.com/aethne0/kitchen-sync/blob/master/src/mcs_lock.rs) RAII Mellor-Crummey-Scott lock, as well as others.
 
