@@ -32,6 +32,7 @@ mod test {
     #[test]
     fn test_mcs() {
         const COUNT: usize = 256;
+        const ITERS: usize = 9000;
 
         let rx = {
             let (tx, rx) = mpsc::channel();
@@ -47,9 +48,11 @@ mod test {
                 thread::spawn(move || {
                     wg.wait();
 
-                    let mut val_l = mcs.lock();
-                    tx.send(*val_l).unwrap();
-                    *val_l += 1;
+                    for _ in 0..ITERS{
+                        let mut val_l = mcs.lock();
+                        tx.send(*val_l).unwrap();
+                        *val_l += 1;
+                    }
                 });
             }
             rx
@@ -66,7 +69,7 @@ mod test {
             }
         }
 
-        for i in 0..COUNT {
+        for i in 0..(COUNT * ITERS) {
             assert!(rcvd.contains(&i));
         }
     }

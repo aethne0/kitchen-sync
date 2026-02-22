@@ -1,3 +1,4 @@
+#![cfg(target_os = "linux")]
 use std::{
     cell::{RefCell, UnsafeCell},
     ops::{Deref, DerefMut},
@@ -11,9 +12,16 @@ pub struct MCSLock<T: ?Sized> {
     inner: UnsafeCell<T>,
 }
 
+const SPINS_LOCK: usize = 64;
+
 unsafe impl<T: ?Sized + Send> Send for MCSLock<T> where T: Send {}
 unsafe impl<T: ?Sized + Send> Sync for MCSLock<T> where T: Send {}
 
+/// This is a thread-local struct used by threads to attach themselves into the "queue" link-list.
+/// Threads will attach themselves at the `tail` of the lock which is "last in line".
+/// Threads will spin on their own `locked` field, which will be eventually set to `false` by the
+/// thread "ahead of them in line" (in other words: the thread that gets the lock immediately before them).
+#[repr(align(64))]
 struct QueueNode {
     next: AtomicPtr<QueueNode>,
     locked: AtomicBool,
@@ -39,6 +47,9 @@ impl<T> MCSLock<T> {
 
     pub fn lock<'a>(&'a self) -> Guard<'a, T> {
         QUEUE_NODE.with_borrow_mut(|queue_node| {
+            // I think this is needed, otherwise we may have a stale `next` ptr
+            queue_node.next.store(null_mut(), Ordering::Relaxed);
+
             // ptr to our thread_local queue_node struct
             let queue_node_ptr = (queue_node) as *mut _;
 
@@ -60,8 +71,22 @@ impl<T> MCSLock<T> {
                 unsafe { (*pred).next.store(queue_node_ptr, Ordering::Release) };
                 // 3. Spin on our "locked" field until we are unlocked (which the predecessor will do
                 //    once it releases the lock)
+                let mut spin_cnt = 0;
                 while queue_node.locked.load(Ordering::Acquire) {
-                    std::hint::spin_loop();
+                    if spin_cnt < SPINS_LOCK {
+                        spin_cnt += 1;
+                        std::hint::spin_loop();
+                    } else {
+                        unsafe {
+                            libc::syscall(
+                                libc::SYS_futex,
+                                &queue_node.locked as *const AtomicBool,
+                                libc::FUTEX_WAIT,
+                                1,
+                                std::ptr::null::<libc::timespec>(),
+                            );
+                        }
+                    }
                 }
             }
             // If there was nobody in the queue, it is our turn instantly - we simply grab the lock
@@ -120,15 +145,23 @@ impl<'a, T> Drop for Guard<'a, T> {
                 }
                 // If our cmpxchg failed we check our queue_node's `next` ptr again to see the node
                 // that must have been added to the list after us.
+
                 std::hint::spin_loop();
             }
 
             // If someone *is* after us, and we now have a ptr to their queue_node, we simply need to
             // unlock them now, after that our work is done.
             unsafe {
-                (*queue_node.next.load(Ordering::Relaxed))
-                    .locked
-                    .store(false, Ordering::Release);
+                let locked_field = &(*queue_node.next.load(Ordering::Relaxed)).locked;
+                locked_field.store(false, Ordering::Release);
+
+                // wake if slept
+                libc::syscall(
+                    libc::SYS_futex,
+                    locked_field as *const AtomicBool,
+                    libc::FUTEX_WAKE,
+                    1,
+                );
             }
         });
     }
@@ -146,4 +179,3 @@ impl<'a, T> DerefMut for Guard<'a, T> {
         self.inner
     }
 }
-
