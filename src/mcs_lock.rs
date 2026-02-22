@@ -12,7 +12,7 @@ pub struct MCSLock<T: ?Sized> {
     inner: UnsafeCell<T>,
 }
 
-const SPINS_LOCK: usize = 64;
+const SPINS_LOCK: usize = 64; // value chosen by consulting celestial alignments
 
 unsafe impl<T: ?Sized + Send> Send for MCSLock<T> where T: Send {}
 unsafe impl<T: ?Sized + Send> Sync for MCSLock<T> where T: Send {}
@@ -81,7 +81,7 @@ impl<T> MCSLock<T> {
                             libc::syscall(
                                 libc::SYS_futex,
                                 &queue_node.locked as *const AtomicBool,
-                                libc::FUTEX_WAIT,
+                                libc::FUTEX_WAIT | libc::FUTEX_PRIVATE_FLAG,
                                 1,
                                 std::ptr::null::<libc::timespec>(),
                             );
@@ -134,7 +134,7 @@ impl<'a, T> Drop for Guard<'a, T> {
                     .compare_exchange(
                         queue_node_ptr,
                         null_mut(),
-                        Ordering::Release, // 1
+                        Ordering::Release, // TODO: think about ordering more carefully
                         Ordering::Relaxed,
                     )
                     .is_ok()
@@ -159,7 +159,7 @@ impl<'a, T> Drop for Guard<'a, T> {
                 libc::syscall(
                     libc::SYS_futex,
                     locked_field as *const AtomicBool,
-                    libc::FUTEX_WAKE,
+                    libc::FUTEX_WAKE | libc::FUTEX_PRIVATE_FLAG,
                     1,
                 );
             }
