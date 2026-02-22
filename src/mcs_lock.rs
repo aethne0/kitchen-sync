@@ -5,8 +5,6 @@ use std::{
     sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
 
-// TODO: Memory ordering needs to be fixed (Relaxed isn't sufficient)
-
 /// Simple RAII Mellor-Crummey-Scott lock
 pub struct MCSLock<T: ?Sized> {
     tail: AtomicPtr<QueueNode>,
@@ -47,7 +45,7 @@ impl<T> MCSLock<T> {
             // This will be the queue_node "before" us temporally speaking, if any.
             // This node will point to us as the "next in line".
             // We are now pointed to by the lock's tail ptr
-            let pred = self.tail.swap(queue_node_ptr, Ordering::Relaxed);
+            let pred = self.tail.swap(queue_node_ptr, Ordering::AcqRel);
 
             // If there was indeed a predecessor in the queue, then we do the following:
             if !pred.is_null() {
@@ -59,10 +57,10 @@ impl<T> MCSLock<T> {
                 //      won't know to `unlock` us because its `next` ptr is not yet set. This is handled
                 //      in unlock - otherwise we'd have a race that could lead to a deadlock (we're
                 //      locked and nobody will ever unlock us).
-                unsafe { (*pred).next.store(queue_node_ptr, Ordering::Relaxed) };
+                unsafe { (*pred).next.store(queue_node_ptr, Ordering::Release) };
                 // 3. Spin on our "locked" field until we are unlocked (which the predecessor will do
                 //    once it releases the lock)
-                while queue_node.locked.load(Ordering::Relaxed) {
+                while queue_node.locked.load(Ordering::Acquire) {
                     std::hint::spin_loop();
                 }
             }
@@ -92,7 +90,7 @@ impl<'a, T> Drop for Guard<'a, T> {
             let queue_node_ptr = queue_node as *mut _;
 
             // Has anyone attached themselves "after" us while we were working?
-            while queue_node.next.load(Ordering::Relaxed).is_null() {
+            while queue_node.next.load(Ordering::Acquire).is_null() {
                 // We cmpxchg the lock's `tail` ptr with `null`, if this fails it means that
                 // someone has added themselves to the queue since we did our `next == null` check
                 // in the while condition immediately before this.
@@ -111,7 +109,7 @@ impl<'a, T> Drop for Guard<'a, T> {
                     .compare_exchange(
                         queue_node_ptr,
                         null_mut(),
-                        Ordering::Relaxed,
+                        Ordering::Release, // 1
                         Ordering::Relaxed,
                     )
                     .is_ok()
@@ -125,12 +123,12 @@ impl<'a, T> Drop for Guard<'a, T> {
                 std::hint::spin_loop();
             }
 
-            // If someone *is* after us, and we now have a ptr to their queue_node, we simply need to 
+            // If someone *is* after us, and we now have a ptr to their queue_node, we simply need to
             // unlock them now, after that our work is done.
             unsafe {
                 (*queue_node.next.load(Ordering::Relaxed))
                     .locked
-                    .store(false, Ordering::Relaxed);
+                    .store(false, Ordering::Release);
             }
         });
     }
@@ -148,3 +146,4 @@ impl<'a, T> DerefMut for Guard<'a, T> {
         self.inner
     }
 }
+

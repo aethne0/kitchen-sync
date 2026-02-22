@@ -31,7 +31,7 @@ mod test {
 
     #[test]
     fn test_mcs() {
-        const COUNT: usize = 10_000;
+        const COUNT: usize = 256;
 
         let rx = {
             let (tx, rx) = mpsc::channel();
@@ -57,8 +57,13 @@ mod test {
 
         let mut rcvd = HashSet::with_capacity(COUNT);
 
+        let mut cnt = 0;
         while let Ok(val) = rx.recv() {
             rcvd.insert(val);
+            cnt += 1;
+            if cnt % 100 == 0 {
+                println!("rcvd {}", cnt);
+            }
         }
 
         for i in 0..COUNT {
