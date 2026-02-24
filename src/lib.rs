@@ -27,7 +27,7 @@ mod test {
         thread,
     };
 
-    use crate::mcs_lock::MCSLock;
+    use crate::mcs_lock::{MCSLock, QueueNode};
 
     #[test]
     fn test_mcs() {
@@ -47,9 +47,10 @@ mod test {
 
                 thread::spawn(move || {
                     wg.wait();
+                    let mut qn = QueueNode::new();
 
-                    for _ in 0..ITERS{
-                        let mut val_l = mcs.lock();
+                    for _ in 0..ITERS {
+                        let mut val_l = mcs.lock(&mut qn);
                         tx.send(*val_l).unwrap();
                         *val_l += 1;
                     }
@@ -64,7 +65,7 @@ mod test {
         while let Ok(val) = rx.recv() {
             rcvd.insert(val);
             cnt += 1;
-            if cnt % 100 == 0 {
+            if cnt % 10000 == 0 {
                 println!("rcvd {}", cnt);
             }
         }
