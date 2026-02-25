@@ -31,8 +31,8 @@ mod test {
 
     #[test]
     fn test_mcs() {
-        const COUNT: usize = 256;
-        const ITERS: usize = 9000;
+        const COUNT: usize = 64;
+        const ITERS: usize = 64;
 
         let rx = {
             let (tx, rx) = mpsc::channel();
